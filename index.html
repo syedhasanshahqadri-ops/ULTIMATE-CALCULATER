@@ -1,20 +1,7 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <title>ULTIMATE CALCULATER | Smart Marks Calculator</title>
-<meta name="description" content="Calculate your marks, track your percentage, and monitor your academic progress with ULTIMATE CALCULATER.">
-
-<meta property="og:type" content="website">
-<meta property="og:title" content="ULTIMATE CALCULATER">
-<meta property="og:description" content="Track your marks, calculate your percentage, and monitor your progress with a beautiful interactive dashboard.">
-<meta property="og:url" content="https://syedhasanshahqadri-ops.github.io/ULTIMATE-CALCULATER/">
-<meta property="og:image" content="https://syedhasanshahqadri-ops.github.io/ULTIMATE-CALCULATER/preview.png">
-<meta property="og:image:width" content="1536">
-<meta property="og:image:height" content="1024">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ULTIMATE CALCULATER">
-<meta name="twitter:description" content="A smarter way to calculate marks and percentages.">
-<meta name="twitter:image" content="https://syedhasanshahqadri-ops.github.io/ULTIMATE-CALCULATER/preview.png">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#101427">
@@ -66,7 +53,8 @@ button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus
         <div class="actions">
           <button class="secondary" id="editBtn">✎ Edit subjects</button>
           <button class="secondary" id="saveBtn">♡ Save</button>
-          <button class="secondary" id="downloadBtn">↓ Download</button>
+          <button class="secondary" id="downloadImageBtn">🖼️ Download PNG</button>
+          <button class="secondary" id="downloadCsvBtn">📊 Download CSV</button>
           <button class="secondary" id="resetBtn">↺ Reset marks</button>
         </div>
       </div>
@@ -221,20 +209,182 @@ button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus
       showToast('Your results are saved on this device.');
     } catch(e) { showToast('Could not save. Your browser storage may be disabled.'); }
   });
-  $('downloadBtn').addEventListener('click',()=>{
-    const obtained=subjects.reduce((a,s)=>a+s.obtained,0), max=subjects.reduce((a,s)=>a+s.max,0);
-    const percent=pct(obtained,max);
-    const escCSV=v=>`"${String(v).replace(/"/g,'""')}"`;
-    const rows=[['Markly Results'],['Student',studentName],['Date',new Date().toLocaleString()],[],['Subject','Obtained marks','Maximum marks','Percentage']];
-    subjects.forEach(s=>rows.push([s.name,s.obtained,s.max,`${pct(s.obtained,s.max).toFixed(2)}%`]));
-    rows.push([],['Total',obtained,max,`${percent.toFixed(2)}%`],['Average per subject',subjects.length?obtained/subjects.length:0,'','']);
-    const csv='\ufeff'+rows.map(row=>row.map(escCSV).join(',')).join('\r\n');
-    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-    const url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url;a.download=`${(studentName||'student').replace(/[^a-z0-9-_]/gi,'_')}-marks.csv`;
-    document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+
+  // Shared download helper for PNG and CSV files
+  function downloadFile(blob, filename) {
+    if (!blob) {
+      showToast('Could not create the file. Please try again.');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  function safeFilename() {
+    return (studentName || 'student').replace(/[^a-z0-9-_]/gi, '_') || 'student';
+  }
+
+  // Download marks as CSV
+  $('downloadCsvBtn').addEventListener('click', () => {
+    const obtained = subjects.reduce((a,s) => a + s.obtained, 0);
+    const max = subjects.reduce((a,s) => a + s.max, 0);
+    const percent = pct(obtained, max);
+    const escCSV = v => `"${String(v).replace(/"/g,'""')}"`;
+
+    const rows = [
+      ['Markly Results'],
+      ['Student', studentName],
+      ['Date', new Date().toLocaleString()],
+      [],
+      ['Subject','Obtained marks','Maximum marks','Percentage']
+    ];
+
+    subjects.forEach(s => rows.push([
+      s.name, s.obtained, s.max,
+      `${pct(s.obtained,s.max).toFixed(2)}%`
+    ]));
+
+    rows.push(
+      [],
+      ['Total', obtained, max, `${percent.toFixed(2)}%`],
+      ['Average per subject', subjects.length ? obtained / subjects.length : 0, '', '']
+    );
+
+    const csv = '\ufeff' + rows.map(row => row.map(escCSV).join(',')).join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    downloadFile(blob, `${safeFilename()}-marks.csv`);
     showToast('Results downloaded as a CSV file.');
   });
+
+  // Create a separate PNG report image
+  $('downloadImageBtn').addEventListener('click', () => {
+    if (!subjects.length) {
+      showToast('No results available to export.');
+      return;
+    }
+
+    try {
+      const obtained = subjects.reduce((a,s) => a + s.obtained, 0);
+      const max = subjects.reduce((a,s) => a + s.max, 0);
+      const percent = pct(obtained, max);
+      const average = obtained / subjects.length;
+
+      const W = 1000;
+      const rowH = 62;
+      const headerH = 310;
+      const footerH = 100;
+      const canvas = document.createElement('canvas');
+
+      canvas.width = W;
+      canvas.height = headerH + subjects.length * rowH + footerH;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas is unavailable');
+
+      // Background
+      const gradient = ctx.createLinearGradient(0, 0, W, canvas.height);
+      gradient.addColorStop(0, '#101427');
+      gradient.addColorStop(1, '#20284a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, W, canvas.height);
+
+      // Heading
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 40px Arial, sans-serif';
+      ctx.fillText('Markly Results', 50, 58);
+
+      ctx.fillStyle = '#42d6c5';
+      ctx.font = 'bold 20px Arial, sans-serif';
+      ctx.fillText('ACADEMIC RESULTS REPORT', 52, 94);
+
+      ctx.fillStyle = '#c2cbe5';
+      ctx.font = '20px Arial, sans-serif';
+      ctx.fillText(`Student: ${studentName || 'Student'}`, 52, 137);
+      ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, 52, 170);
+
+      // Summary cards
+      const cards = [
+        ['TOTAL OBTAINED', `${fmt(obtained)} / ${fmt(max)}`],
+        ['PERCENTAGE', `${percent.toFixed(2)}%`],
+        ['AVERAGE', fmt(average)]
+      ];
+
+      cards.forEach((card, i) => {
+        const x = 50 + i * 305;
+        ctx.fillStyle = '#222c4b';
+        ctx.fillRect(x, 198, 285, 94);
+
+        ctx.fillStyle = '#aab3ce';
+        ctx.font = 'bold 15px Arial, sans-serif';
+        ctx.fillText(card[0], x + 15, 225);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 23px Arial, sans-serif';
+        ctx.fillText(card[1], x + 15, 263);
+      });
+
+      // Table header
+      let y = headerH;
+      ctx.fillStyle = '#42d6c5';
+      ctx.fillRect(50, y, 900, 48);
+
+      ctx.fillStyle = '#101427';
+      ctx.font = 'bold 17px Arial, sans-serif';
+      ctx.fillText('SUBJECT', 65, y + 30);
+      ctx.fillText('OBTAINED', 490, y + 30);
+      ctx.fillText('MAX MARKS', 640, y + 30);
+      ctx.fillText('PERCENT', 810, y + 30);
+
+      y += 48;
+
+      subjects.forEach((s, i) => {
+        ctx.fillStyle = i % 2 === 0 ? '#19213b' : '#222c4b';
+        ctx.fillRect(50, y, 900, rowH);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '18px Arial, sans-serif';
+
+        let name = s.name;
+        while (ctx.measureText(name).width > 385 && name.length > 4) {
+          name = name.slice(0, -4) + '...';
+        }
+
+        ctx.fillText(name, 65, y + 37);
+        ctx.fillText(fmt(s.obtained), 490, y + 37);
+        ctx.fillText(fmt(s.max), 640, y + 37);
+
+        ctx.fillStyle = '#42d6c5';
+        ctx.fillText(`${pct(s.obtained,s.max).toFixed(2)}%`, 810, y + 37);
+        y += rowH;
+      });
+
+      // Footer
+      ctx.fillStyle = '#c2cbe5';
+      ctx.font = '17px Arial, sans-serif';
+      ctx.fillText('Markly · Your marks, made simple', 50, y + 38);
+
+      canvas.toBlob(blob => {
+        if (!blob) {
+          showToast('Could not create the image. Please try again.');
+          return;
+        }
+
+        downloadFile(blob, `${safeFilename()}-results.png`);
+        showToast('PNG result image is ready!');
+      }, 'image/png');
+    } catch (error) {
+      showToast('Image creation failed. Please try another browser.');
+      console.error('PNG export error:', error);
+    }
+  });
+
   $('themeToggle').addEventListener('click',()=>{
     const light=document.documentElement.classList.toggle('light');
     $('themeToggle').textContent=light?'🌙':'☀️';
