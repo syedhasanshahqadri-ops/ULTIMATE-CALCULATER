@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -107,6 +106,26 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;padding:0 0 25px}
 @media(max-width:800px){.content-grid{grid-template-columns:1fr}.summary-panel{position:static}.ring{width:175px}.dashboard-top{flex-direction:column}.actions{width:100%}.actions button{flex:1}.stats{gap:9px}.stat{padding:14px}.stat-icon{width:26px;height:26px}.summary-panel .summary-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;gap:10px}}
 @media(max-width:520px){.shell{width:min(100% - 22px,1120px)}.topbar{padding:15px 0}.hero{padding:27px 0 15px}.setup{margin:14px auto 45px}.setup-grid{grid-template-columns:1fr}.subject-row{grid-template-columns:1fr 110px;gap:9px;padding:10px}.text-input,.number-input{padding:11px}.stats{grid-template-columns:1fr 1fr}.stat:last-child{grid-column:1/-1}.stat-value{font-size:1.55rem}.stat{border-radius:15px}.card{border-radius:19px}.actions button{padding:9px 10px;font-size:.8rem}.summary-panel .summary-layout{grid-template-columns:1fr}.ring{width:165px}.section-head{margin-bottom:18px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* ===== PNG report template (off-screen) ===== */
+.report-png{position:fixed;left:-99999px;top:0;width:1000px;padding:50px;color:#f5f7ff;
+  background:linear-gradient(135deg,#0b1020 0%,#1a2342 100%);
+  font-family:Roboto,Inter,"Segoe UI",Arial,sans-serif;box-sizing:border-box}
+.report-png *{box-sizing:border-box}
+.report-png h1{margin:0;font-size:40px;line-height:1.1;letter-spacing:0;color:#fff;font-weight:800}
+.report-png .rp-sub{margin:12px 0 22px;color:#42d6c5;font-weight:700;font-size:20px;letter-spacing:.02em;text-transform:uppercase}
+.report-png .rp-meta{color:#c9d0e8;font-size:20px;line-height:32px;margin-bottom:22px}
+.report-png .rp-stats{display:flex;gap:20px;margin-bottom:18px}
+.report-png .rp-stat{flex:1;background:#212b4d;padding:16px 16px 14px}
+.report-png .rp-stat small{display:block;color:#aab3ce;font-size:14px;font-weight:700;text-transform:uppercase;margin-bottom:10px}
+.report-png .rp-stat b{font-size:24px;color:#fff}
+.report-png table{width:100%;border-collapse:collapse;font-size:18px}
+.report-png th{background:#42d6c5;color:#0b1020;text-align:left;padding:15px;font-size:16px;font-weight:800;text-transform:uppercase}
+.report-png td{padding:19px 15px;color:#fff}
+.report-png tbody tr:nth-child(odd){background:#151c36}
+.report-png tbody tr:nth-child(even){background:#212b4d}
+.report-png td.rp-pct{color:#42d6c5}
+.report-png .rp-foot{margin-top:18px;color:#c9d0e8;font-size:16px}
 </style>
 </head>
 <body>
@@ -362,59 +381,86 @@ footer{text-align:center;color:var(--muted);font-size:.8rem;padding:0 0 25px}
     }
   });
 
-  // Download dashboard as PNG instead of CSV
-  $('downloadBtn').addEventListener('click',async()=>{
+  // Build the report layout that gets exported as PNG
+  function buildReportElement() {
+    const obtained = subjects.reduce((sum,s)=>sum+s.obtained,0);
+    const max = subjects.reduce((sum,s)=>sum+s.max,0);
+    const percent = pct(obtained,max);
+    const avg = subjects.length ? obtained/subjects.length : 0;
+    const date = new Date().toLocaleDateString('en-US');
+
+    const rows = subjects.map(s => `
+      <tr>
+        <td>${escapeHTML(s.name)}</td>
+        <td>${fmt(s.obtained)}</td>
+        <td>${fmt(s.max)}</td>
+        <td class="rp-pct">${pct(s.obtained,s.max).toFixed(2)}%</td>
+      </tr>`).join('');
+
+    const el = document.createElement('div');
+    el.className = 'report-png';
+    el.innerHTML = `
+      <h1>Markly Results</h1>
+      <div class="rp-sub">Academic Results Report</div>
+      <div class="rp-meta">Student: ${escapeHTML(studentName || 'Student')}<br>Date: ${date}</div>
+      <div class="rp-stats">
+        <div class="rp-stat"><small>Total Obtained</small><b>${fmt(obtained)} / ${fmt(max)}</b></div>
+        <div class="rp-stat"><small>Percentage</small><b>${percent.toFixed(2)}%</b></div>
+        <div class="rp-stat"><small>Average</small><b>${fmt(avg)}</b></div>
+      </div>
+      <table>
+        <thead><tr><th style="width:44%">Subject</th><th>Obtained</th><th>Max Marks</th><th>Percent</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="rp-foot">Markly · Your marks, made simple</div>`;
+    return el;
+  }
+
+  // Download the report template as PNG
+  $('downloadBtn').addEventListener('click', async () => {
     if (typeof html2canvas === 'undefined') {
       showToast('PNG library could not load. Check your internet connection.');
       return;
     }
+    if (!subjects.length) return;
 
-    const dashboard = $('dashboard');
     const button = $('downloadBtn');
     const oldText = button.textContent;
+    const report = buildReportElement();
+    document.body.appendChild(report);
 
     try {
       button.disabled = true;
       button.textContent = 'Preparing PNG...';
 
-      const canvas = await html2canvas(dashboard,{
-        backgroundColor:getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0b1020',
-        scale:2,
-        useCORS:true,
-        logging:false,
-        windowWidth:Math.max(document.documentElement.clientWidth, dashboard.scrollWidth),
-        onclone: clonedDoc => {
-          const clonedDashboard = clonedDoc.getElementById('dashboard');
-          if (clonedDashboard) {
-            clonedDashboard.style.animation = 'none';
-            clonedDashboard.querySelectorAll('.range').forEach(range => {
-              range.style.appearance = 'none';
-            });
-          }
-        }
+      const canvas = await html2canvas(report, {
+        backgroundColor: '#0b1020',
+        scale: 2,
+        useCORS: true,
+        logging: false
       });
 
-      canvas.toBlob(blob=>{
+      canvas.toBlob(blob => {
         if (!blob) {
           showToast('Could not create PNG. Please try again.');
           return;
         }
-
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a');
-        const safeName=(studentName||'student').replace(/[^a-z0-9-_]/gi,'_');
-        a.href=url;
-        a.download=`${safeName}-markly-results.png`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const safeName = (studentName || 'student').replace(/[^a-z0-9-_]/gi,'_');
+        a.href = url;
+        a.download = `${safeName}-markly-results.png`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),1000);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         showToast('Results downloaded as a PNG image.');
-      },'image/png');
-    } catch(error) {
+      }, 'image/png');
+    } catch (error) {
       console.error(error);
       showToast('PNG download failed. Please try again.');
     } finally {
+      report.remove();
       button.disabled = false;
       button.textContent = oldText;
     }
